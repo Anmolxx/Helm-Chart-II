@@ -1,0 +1,77 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "react-clean"
+        TAG = "${BRANCH_NAME}"
+        RELEASE_NAME = ""
+        VALUES_FILE = ""
+    }
+
+    stages {
+
+        stage('Detect Branch') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == "dev") {
+                        env.RELEASE_NAME = "react-dev"
+                        env.VALUES_FILE = "react-app/values-dev.yaml"
+
+                    } else if (env.BRANCH_NAME == "staging") {
+                        env.RELEASE_NAME = "react-staging"
+                        env.VALUES_FILE = "react-app/values-staging.yaml"
+
+                    } else if (env.BRANCH_NAME == "prod") {
+                        env.RELEASE_NAME = "react-prod"
+                        env.VALUES_FILE = "react-app/values-prod.yaml"
+
+                    } else {
+                        error("Unsupported branch: ${env.BRANCH_NAME}")
+                    }
+                }
+            }
+        }
+
+        stage('Build Image') {
+            steps {
+                sh """
+                docker build -t ${IMAGE_NAME}:${TAG} .
+                """
+            }
+        }
+
+        stage('Load Image to Minikube') {
+            steps {
+                sh """
+                minikube image load ${IMAGE_NAME}:${TAG}
+                """
+            }
+        }
+
+        stage('Deploy Helm') {
+            steps {
+                sh """
+                helm upgrade --install ${RELEASE_NAME} ./react-app -f ${VALUES_FILE} \
+                --set image.repository=${IMAGE_NAME} \
+                --set image.tag=${TAG}
+                """
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                sh "kubectl get pods"
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Deployment successful"
+        }
+
+        failure {
+            echo "Pipeline failed"
+        }
+    }
+}
