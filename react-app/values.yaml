@@ -1,0 +1,75 @@
+replicaCount: 2
+
+image:
+  repository: react-clean
+  tag: v1
+  pullPolicy: Never
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: false
+  annotations: {}
+  name: ""
+
+podSecurityContext: {}
+
+securityContext:
+  runAsUser: 0
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  nodePort: null
+
+ingress:
+  enabled: true
+  className: nginx
+  host: react.local
+  path: /
+  pathType: Prefix
+  annotations: {}
+
+resources:
+  requests:
+    memory: 128Mi
+    cpu: 100m
+  limits:
+    memory: 512Mi
+    cpu: 500m
+
+probes:
+  liveness:
+    path: /
+    initialDelaySeconds: 20
+    periodSeconds: 10
+  readiness:
+    path: /
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+env:
+  APP_NAME: react-clean
+  LOG_LEVEL: info
+  APP_ENV: local
+
+nginx:
+  extraVolumeMounts:
+    - name: tmp
+      mountPath: /tmp
+    - name: nginx-cache
+      mountPath: /var/cache/nginx
+    - name: nginx-run
+      mountPath: /var/run
+
+extraVolumes:
+  - name: tmp
+    emptyDir: {}
+  - name: nginx-cache
+    emptyDir: {}
+  - name: nginx-run
+    emptyDir: {}
