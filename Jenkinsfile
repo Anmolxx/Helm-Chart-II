@@ -2,10 +2,9 @@ pipeline {
     agent any
 
     environment {
+        KUBECONFIG = "/var/jenkins_home/.kubeconfig"
         IMAGE_NAME = "react-clean"
         TAG = "${BRANCH_NAME}"
-        RELEASE_NAME = ""
-        VALUES_FILE = ""
     }
 
     stages {
@@ -14,19 +13,14 @@ pipeline {
             steps {
                 script {
                     if (env.BRANCH_NAME == "dev") {
-                        env.RELEASE_NAME = "react-dev"
-                        env.VALUES_FILE = "react-app/values-dev.yaml"
-
+                        env.RELEASE = "react-dev"
+                        env.VALUES = "react-app/values-dev.yaml"
                     } else if (env.BRANCH_NAME == "staging") {
-                        env.RELEASE_NAME = "react-staging"
-                        env.VALUES_FILE = "react-app/values-staging.yaml"
-
-                    } else if (env.BRANCH_NAME == "prod") {
-                        env.RELEASE_NAME = "react-prod"
-                        env.VALUES_FILE = "react-app/values-prod.yaml"
-
+                        env.RELEASE = "react-staging"
+                        env.VALUES = "react-app/values-staging.yaml"
                     } else {
-                        error("Unsupported branch: ${env.BRANCH_NAME}")
+                        env.RELEASE = "react-prod"
+                        env.VALUES = "react-app/values-prod.yaml"
                     }
                 }
             }
@@ -34,24 +28,15 @@ pipeline {
 
         stage('Build Image') {
             steps {
-                sh """
-                docker build -t ${IMAGE_NAME}:${TAG} .
-                """
+                sh "docker build -t ${IMAGE_NAME}:${TAG} ."
             }
         }
 
-        stage('Load Image to Minikube') {
+        stage('Deploy') {
             steps {
                 sh """
-                minikube image load ${IMAGE_NAME}:${TAG}
-                """
-            }
-        }
-
-        stage('Deploy Helm') {
-            steps {
-                sh """
-                helm upgrade --install ${RELEASE_NAME} ./react-app -f ${VALUES_FILE} \
+                helm upgrade --install ${RELEASE} ./react-app \
+                -f ${VALUES} \
                 --set image.repository=${IMAGE_NAME} \
                 --set image.tag=${TAG}
                 """
@@ -62,16 +47,6 @@ pipeline {
             steps {
                 sh "kubectl get pods"
             }
-        }
-    }
-
-    post {
-        success {
-            echo "Deployment successful"
-        }
-
-        failure {
-            echo "Pipeline failed"
         }
     }
 }
