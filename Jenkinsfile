@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        KUBECONFIG = "/var/jenkins_home/.kubeconfig"
         IMAGE_NAME = "react-clean"
-        TAG = "${BRANCH_NAME}"
+        CLUSTER_NAME = "jenkins-cluster"
+        KUBECONFIG = "/var/jenkins_home/.kubeconfig"
     }
 
     stages {
@@ -12,41 +12,77 @@ pipeline {
         stage('Detect Branch') {
             steps {
                 script {
-                    if (env.BRANCH_NAME == "dev") {
-                        env.RELEASE = "react-dev"
-                        env.VALUES = "react-app/values-dev.yaml"
-                    } else if (env.BRANCH_NAME == "staging") {
-                        env.RELEASE = "react-staging"
-                        env.VALUES = "react-app/values-staging.yaml"
+                    if (env.BRANCH_NAME == 'dev') {
+                        env.ENV = 'dev'
+                        env.RELEASE = 'react-dev'
+                        env.VALUES = 'react-app/values-dev.yaml'
+                    } else if (env.BRANCH_NAME == 'staging') {
+                        env.ENV = 'staging'
+                        env.RELEASE = 'react-staging'
+                        env.VALUES = 'react-app/values-staging.yaml'
+                    } else if (env.BRANCH_NAME == 'prod') {
+                        env.ENV = 'prod'
+                        env.RELEASE = 'react-prod'
+                        env.VALUES = 'react-app/values-prod.yaml'
                     } else {
-                        env.RELEASE = "react-prod"
-                        env.VALUES = "react-app/values-prod.yaml"
+                        error("Unknown branch: ${env.BRANCH_NAME}")
                     }
+
+                    env.TAG = env.ENV
                 }
             }
         }
 
         stage('Build Image') {
             steps {
-                sh "docker build -t ${IMAGE_NAME}:${TAG} ."
+                sh '''
+                docker build -t ${IMAGE_NAME}:${TAG} .
+                '''
             }
         }
 
-        stage('Deploy') {
+        stage('Load Image into KIND') {
             steps {
-                sh """
+                sh '''
+                kind load docker-image ${IMAGE_NAME}:${TAG} --name ${CLUSTER_NAME}
+                '''
+            }
+        }
+
+        stage('Deploy with Helm') {
+            steps {
+                sh '''
+                export KUBECONFIG=${KUBECONFIG}
+
                 helm upgrade --install ${RELEASE} ./react-app \
-                -f ${VALUES} \
-                --set image.repository=${IMAGE_NAME} \
-                --set image.tag=${TAG}
-                """
+                  -f ${VALUES} \
+                  --set image.repository=${IMAGE_NAME} \
+                  --set image.tag=${TAG}
+                '''
             }
         }
 
-        stage('Verify') {
+        stage('Verify Deployment') {
             steps {
-                sh "kubectl get pods"
+                sh '''
+                export KUBECONFIG=${KUBECONFIG}
+
+                echo "=== Pods ==="
+                kubectl get pods
+
+                echo "=== Services ==="
+                kubectl get svc
+                '''
             }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Deployment successful for ${env.RELEASE}"
+        }
+        failure {
+            echo "❌ Deployment failed"
         }
     }
 }
