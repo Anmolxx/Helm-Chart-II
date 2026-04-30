@@ -28,7 +28,8 @@ pipeline {
                         error("Unknown branch: ${env.BRANCH_NAME}")
                     }
 
-                    env.TAG = env.ENV
+                    // 🔥 FIX: Unique tag per build
+                    env.TAG = "${env.ENV}-${env.BUILD_NUMBER}"
                 }
             }
         }
@@ -79,7 +80,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ Deployment successful for ${env.RELEASE}"
+            echo "✅ Deployment successful for ${env.RELEASE} with tag ${env.TAG}"
         }
         failure {
             echo "❌ Deployment failed"
